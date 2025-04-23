@@ -1,71 +1,128 @@
-// Tam sürüm Tetris kodu (güncellenmiş kontrol sistemi ile)
-
 <!DOCTYPE html><html lang="tr">
 <head>
   <meta charset="UTF-8">
-  <title>Tetris Gelişmiş</title>
+  <title>Bulut Tetris</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
+    body {
+      margin: 0;
+      background: #111;
+      font-family: Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
     canvas {
       background: #000;
-      display: block;
-      margin: 20px auto 10px auto;
-      border: 2px solid white;
+      margin-top: 20px;
+      border: 3px solid white;
     }
     .controls {
       display: flex;
       justify-content: center;
-      margin-bottom: 10px;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 20px 0;
     }
     .controls button {
-      width: 80px;
-      height: 40px;
-      margin: 0 5px;
-      font-size: 20px;
+      width: 60px;
+      height: 60px;
+      font-size: 24px;
       background-color: #333;
       color: white;
       border: none;
-      border-radius: 5px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px #000;
     }
     .info {
-      position: absolute;
-      right: 10px;
-      top: 10px;
-      font-family: monospace;
-    }
-    .info table {
-      border-collapse: collapse;
-      background-color: #222;
       color: white;
-      font-size: 14px;
+      background: #222;
+      padding: 10px 20px;
+      border-radius: 10px;
+      margin-top: 10px;
+      text-align: center;
     }
-    .info th, .info td {
-      border: 1px solid #444;
-      padding: 5px 10px;
+    .info span {
+      font-size: 16px;
+      display: block;
+      margin: 3px 0;
+      word-wrap: break-word;
+    }
+    .level-popup, .game-over {
+      position: absolute;
+      top: 40%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: yellow;
+      font-size: 28px;
+      background: rgba(255, 0, 0, 0.8);
+      padding: 20px;
+      border: 3px solid #fff;
+      border-radius: 15px;
+      display: none;
+      text-align: center;
+      z-index: 10;
+    }
+    .game-over button {
+      margin-top: 10px;
+      padding: 10px 20px;
+      font-size: 18px;
+      background: #333;
+      color: white;
+      border: none;
+      border-radius: 8px;
     }
   </style>
 </head>
 <body>
-<canvas id="tetris" width="240" height="400"></canvas>
-<div class="controls">
-  <button onmousedown="startMoveLeft()" onmouseup="stopMove()">←</button>
-  <button onclick="rotate()">⟳</button>
-  <button onmousedown="startMoveRight()" onmouseup="stopMove()">→</button>
-  <button onmousedown="startDrop()" onmouseup="stopDrop()">↓</button>
-</div>
-<div class="info">
-  <table>
-    <tr><th>Skor</th><td id="score">0</td></tr>
-    <tr><th>Seviye</th><td id="level">1</td></tr>
-  </table>
-</div><script>
-  const canvas = document.getElementById('tetris');
-  const ctx = canvas.getContext('2d');
-  const blockSize = 20;
-  const cols = canvas.width / blockSize;
-  const rows = canvas.height / blockSize;
+  <h2 style="color:white;margin-top:10px;">Bulut Tetris</h2>
+  <canvas id="tetris" width="240" height="400"></canvas>  <div class="controls">
+    <button onmousedown="startMoveLeft()" onmouseup="stopMove()">←</button>
+    <button onclick="rotate()">⟳</button>
+    <button onmousedown="startMoveRight()" onmouseup="stopMove()">→</button>
+    <button onmousedown="startDrop()" onmouseup="stopDrop()">↓</button>
+  </div>  <div class="info">
+    <span>Skor: <span id="score">0</span></span>
+    <span>Seviye: <span id="level">1</span></span>
+  </div>  <div id="popup" class="level-popup"></div>
+  <div id="gameOver" class="game-over">
+    <div>GAME OVER</div>
+    <button onclick="restartGame()">Yeniden Başlat</button>
+  </div><script>
+const canvas = document.getElementById('tetris');
+const ctx = canvas.getContext('2d');
+const blockSize = 20;
+const cols = canvas.width / blockSize;
+const rows = canvas.height / blockSize;
 
-  const colors = ['#00FFFF', '#FF0000', '#00FF00', '#FFFF00', '#FF00FF', '#FFA500', '#00CED1'];
-  let board = Array.from({ length: rows }, () => Array(cols).fill(0));
+const colors = ['#00FFFF', '#FF0000', '#00FF00', '#FFFF00', '#FF00FF', '#FFA500', '#00CED1'];
+let board;
+let current;
+let score;
+let level;
+let dropInterval;
+let dropCounter;
+let lastTime;
+let moveInterval;
+let dropTimer;
+let animationFrame;
+
+function initGame() {
+  board = Array.from({ length: rows }, () => Array(cols).fill(0));
+  current = createPiece();
+  score = 0;
+  level = 1;
+  dropInterval = 600;
+  dropCounter = 0;
+  lastTime = 0;
+  document.getElementById('score').textContent = score;
+  document.getElementById('level').textContent = level;
+  document.getElementById('gameOver').style.display = 'none';
+  cancelAnimationFrame(animationFrame);
+  update();
+}
+
+function createPiece() {
   const shapes = [
     [[0, 1, 0], [1, 1, 1]],
     [[1, 1], [1, 1]],
@@ -74,176 +131,124 @@
     [[1, 1, 1, 1]],
     [[1], [1], [1], [1]]
   ];
+  const shape = shapes[Math.floor(Math.random() * shapes.length)];
+  const color = colors[Math.floor(Math.random() * colors.length)];
+  return {
+    shape,
+    color,
+    x: Math.floor((cols - shape[0].length) / 2),
+    y: 0
+  };
+}
 
-  let current = createPiece();
-  let score = 0;
-  let level = 1;
-  let dropInterval = 1000;
-  let dropFast = false;
-  let moveInterval;
-  let dropTimer;
+function drawBlock(x, y, color) {
+  ctx.fillStyle = color;
+  ctx.fillRect(x * blockSize, y * blockSize, blockSize, blockSize);
+  ctx.strokeStyle = '#111';
+  ctx.strokeRect(x * blockSize, y * blockSize, blockSize, blockSize);
+}
 
-  function createPiece() {
-    const shape = shapes[Math.floor(Math.random() * shapes.length)];
-    const color = colors[Math.floor(Math.random() * colors.length)];
-    return {
-      shape,
-      color,
-      x: Math.floor((cols - shape[0].length) / 2),
-      y: 0
-    };
+function draw() {
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  board.forEach((row, y) => row.forEach((val, x) => val && drawBlock(x, y, val)));
+  drawShape(current);
+}
+
+function drawShape(piece) {
+  piece.shape.forEach((row, y) => row.forEach((val, x) => val && drawBlock(x + piece.x, y + piece.y, piece.color)));
+}
+
+function moveLeft() { current.x--; if (collide()) current.x++; draw(); }
+function moveRight() { current.x++; if (collide()) current.x--; draw(); }
+function rotate() {
+  const rotated = current.shape[0].map((_, i) => current.shape.map(row => row[i]).reverse());
+  const old = current.shape;
+  current.shape = rotated;
+  if (collide()) current.shape = old;
+  draw();
+}
+function drop() {
+  current.y++;
+  if (collide()) {
+    current.y--;
+    merge();
+    clearLines();
+    current = createPiece();
+    if (collide()) return gameOver();
   }
+  draw();
+}
 
-  function drawBlock(x, y, color) {
-    ctx.fillStyle = color;
-    ctx.fillRect(x * blockSize, y * blockSize, blockSize, blockSize);
-    ctx.strokeStyle = '#111';
-    ctx.strokeRect(x * blockSize, y * blockSize, blockSize, blockSize);
-  }
-
-  function draw() {
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    board.forEach((row, y) => {
-      row.forEach((val, x) => {
-        if (val) drawBlock(x, y, val);
-      });
-    });
-    drawShape(current);
-  }
-
-  function drawShape(piece) {
-    piece.shape.forEach((row, y) => {
-      row.forEach((val, x) => {
-        if (val) drawBlock(x + piece.x, y + piece.y, piece.color);
-      });
-    });
-  }
-
-  function moveLeft() {
-    current.x--;
-    if (collide()) current.x++;
-    draw();
-  }
-
-  function moveRight() {
-    current.x++;
-    if (collide()) current.x--;
-    draw();
-  }
-
-  function rotate() {
-    const shape = current.shape;
-    const rotated = shape[0].map((_, i) => shape.map(row => row[i]).reverse());
-    const old = current.shape;
-    current.shape = rotated;
-    if (collide()) current.shape = old;
-    draw();
-  }
-
-  function drop() {
-    current.y++;
-    if (collide()) {
-      current.y--;
-      merge();
-      clearLines();
-      current = createPiece();
-    }
-    draw();
-  }
-
-  function startDrop() {
-    dropFast = true;
-    dropTimer = setInterval(drop, 50);
-  }
-
-  function stopDrop() {
-    dropFast = false;
-    clearInterval(dropTimer);
-  }
-
-  function startMoveLeft() {
-    moveLeft();
-    moveInterval = setInterval(moveLeft, 100);
-  }
-
-  function startMoveRight() {
-    moveRight();
-    moveInterval = setInterval(moveRight, 100);
-  }
-
-  function stopMove() {
-    clearInterval(moveInterval);
-  }
-
-  function collide() {
-    return current.shape.some((row, dy) =>
-      row.some((val, dx) => {
-        if (val) {
-          const x = current.x + dx;
-          const y = current.y + dy;
-          return x < 0 || x >= cols || y >= rows || board[y]?.[x];
-        }
-        return false;
-      })
-    );
-  }
-
-  function merge() {
-    current.shape.forEach((row, y) => {
-      row.forEach((val, x) => {
-        if (val) board[y + current.y][x + current.x] = current.color;
-      });
-    });
-  }
-
-  function clearLines() {
-    outer: for (let y = rows - 1; y >= 0; y--) {
-      for (let x = 0; x < cols; x++) {
-        if (!board[y][x]) continue outer;
-      }
-      explodeRow(y);
+function collide() {
+  return current.shape.some((row, dy) => row.some((val, dx) => val && (
+    current.x + dx < 0 ||
+    current.x + dx >= cols ||
+    current.y + dy >= rows ||
+    board[current.y + dy][current.x + dx]
+  )));
+}
+function merge() {
+  current.shape.forEach((row, y) => row.forEach((val, x) => {
+    if (val) board[y + current.y][x + current.x] = current.color;
+  }));
+}
+function clearLines() {
+  for (let y = rows - 1; y >= 0; y--) {
+    if (board[y].every(val => val)) {
       board.splice(y, 1);
       board.unshift(Array(cols).fill(0));
       score += 10;
-      updateScore();
+      document.getElementById('score').textContent = score;
+      const newLevel = Math.floor(score / 100) + 1;
+      if (newLevel !== level) {
+        level = newLevel;
+        document.getElementById('level').textContent = level;
+        dropInterval = Math.max(100, 700 - (level - 1) * 80);
+        showLevelPopup(level);
+      }
       y++;
     }
   }
+}
 
-  function explodeRow(y) {
-    for (let i = 0; i < 3; i++) {
-      setTimeout(() => {
-        for (let x = 0; x < cols; x++) {
-          drawBlock(x, y, i % 2 === 0 ? 'red' : 'yellow');
-        }
-      }, i * 100);
-    }
-  }
+function showLevelPopup(lvl) {
+  const popup = document.getElementById('popup');
+  popup.textContent = `${lvl}. Seviye!`;
+  popup.style.display = 'block';
+  setTimeout(() => popup.style.display = 'none', 1500);
+}
 
-  function updateScore() {
-    document.getElementById('score').textContent = score;
-    const newLevel = Math.floor(score / 100) + 1;
-    if (newLevel > level) setLevel(newLevel);
+function gameOver() {
+  document.getElementById('gameOver').style.display = 'block';
+  cancelAnimationFrame(animationFrame);
+}
+function restartGame() {
+  initGame();
+}
+function update(time = 0) {
+  const deltaTime = time - lastTime;
+  lastTime = time;
+  dropCounter += deltaTime;
+  if (dropCounter > dropInterval) {
+    drop();
+    dropCounter = 0;
   }
+  draw();
+  animationFrame = requestAnimationFrame(update);
+}
+function startMoveLeft() {
+  moveLeft();
+  moveInterval = setInterval(moveLeft, 70);
+}
+function startMoveRight() {
+  moveRight();
+  moveInterval = setInterval(moveRight, 70);
+}
+function stopMove() { clearInterval(moveInterval); }
+function startDrop() { drop(); dropTimer = setInterval(drop, 40); }
+function stopDrop() { clearInterval(dropTimer); }
 
-  function setLevel(newLevel) {
-    level = newLevel;
-    document.getElementById('level').textContent = level;
-    dropInterval = 1000 - (level - 1) * 100;
-    if (dropInterval < 100) dropInterval = 100;
-  }
-
-  let dropCounter = 0;
-  function gameLoop() {
-    dropCounter++;
-    if (!dropFast && dropCounter >= dropInterval / 50) {
-      drop();
-      dropCounter = 0;
-    }
-    draw();
-    requestAnimationFrame(gameLoop);
-  }
-  gameLoop();
+initGame();
 </script></body>
 </html>
